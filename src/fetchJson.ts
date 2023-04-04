@@ -1,35 +1,30 @@
 import * as vscode from 'vscode';
 const config = require('../config.json');
-const fetch = require('make-fetch-happen').defaults({
+const fetch: (url: string) => Promise<any> = require('make-fetch-happen').defaults({
     // path where cache will be written (and read)
     cachePath: `${config.cacheDir}`, 
 });
 
 // Function to make DockerHubAPI calls and return JSON data.
-export async function fetchJson(urlDockerHubAPICall:string){
-    const fetchedJson = await fetch(urlDockerHubAPICall)
-    .then(async (res:any) => {
-        if(!res.ok) {
-            res.text().then((text: string | undefined) => {throw Error(text);});
-        }
-        else{
-            const data = await res.json();
-            if(data){
-                return data;
-            }
-        }    
-    })
-    .catch((err:any) => {
-        const error = String(err);
-        const errorMsgSplit = error.split('\n');
-        // Extract the first line from the Error stack trace.
-        const errorMsg = errorMsgSplit[0].slice(errorMsgSplit[0].search(/reason/gi));
-        if(errorMsg.search(/getaddrinfo ENOTFOUND/gi )!== -1){
-            vscode.window.showErrorMessage(`FetchError (${errorMsg}). Restarting Visual Studio Code may resolve this issue. `);
-        }
-        else{
-            vscode.window.showErrorMessage(errorMsgSplit[0]);
-        }
+export function fetchJson(urlDockerHubAPICall: string) {
+    return new Promise(resolve => {
+        fetch(urlDockerHubAPICall)
+        .then(response => {
+            if(response.ok) response.json().then(resolve);
+            else response.text().then((text: string | undefined) => {
+                resolve(undefined);
+                throw Error(text)
+            });
+        })
+        .catch(error => {
+            // Extract the first line from the Error stack trace.
+            const firstLineError = String(error).split("\n")[0];
+            const errorReason = firstLineError.slice(firstLineError.search(/reason/gi));
+            vscode.window.showErrorMessage(errorReason.search(/getaddrinfo ENOTFOUND/gi) !== -1
+                ? `FetchError (${errorReason}). Restarting Visual Studio Code may resolve this issue.`
+                : firstLineError
+            );
+            resolve(undefined);
+        });
     });
-    return fetchedJson;
 }
